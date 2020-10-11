@@ -276,7 +276,7 @@ export class UserController extends AdaptableController {
   defaultResetPasswordEmail({ link, user, appName }) {
     const text =
       'Bonjour,\n\n' +
-      'Vous avez demandé la réinitialisation de votre mot de passe pour ' +
+      'Vous avez demandée la réinitialisation de votre mot de passe pour ' +
       appName +
       (user.get('username')
         ? " (votre nom d'utilisateur est '" + user.get('username') + "')"
