@@ -12,7 +12,6 @@ const PostgresDuplicateColumnError = '42701';
 const PostgresMissingColumnError = '42703';
 const PostgresDuplicateObjectError = '42710';
 const PostgresUniqueIndexViolationError = '23505';
-const PostgresTransactionAbortedError = '25P02';
 const logger = require('../../../logger');
 
 const debug = function (...args: any) {
@@ -986,29 +985,21 @@ export class PostgresStorageAdapter implements StorageAdapter {
     conn = conn || this._client;
     return conn
       .tx('create-class', async t => {
-        const q1 = this.createTable(className, schema, t);
-        const q2 = t.none(
+        await this.createTable(className, schema, t);
+        await t.none(
           'INSERT INTO "_SCHEMA" ("className", "schema", "isParseClass") VALUES ($<className>, $<schema>, true)',
           { className, schema }
         );
-        const q3 = this.setIndexesWithSchemaFormat(
+        await this.setIndexesWithSchemaFormat(
           className,
           schema.indexes,
           {},
           schema.fields,
           t
         );
-        // TODO: The test should not verify the returned value, and then
-        //  the method can be simplified, to avoid returning useless stuff.
-        return t.batch([q1, q2, q3]);
-      })
-      .then(() => {
         return toParseSchema(schema);
       })
       .catch(err => {
-        if (err.data[0].result.code === PostgresTransactionAbortedError) {
-          err = err.data[1].result;
-        }
         if (
           err.code === PostgresUniqueIndexViolationError &&
           err.detail.includes(className)
@@ -1128,7 +1119,7 @@ export class PostgresStorageAdapter implements StorageAdapter {
       if (type.type !== 'Relation') {
         try {
           await t.none(
-            'ALTER TABLE $<className:name> ADD COLUMN $<fieldName:name> $<postgresType:raw>',
+            'ALTER TABLE $<className:name> ADD COLUMN IF NOT EXISTS $<fieldName:name> $<postgresType:raw>',
             {
               className,
               fieldName,
@@ -1271,7 +1262,10 @@ export class PostgresStorageAdapter implements StorageAdapter {
         { schema, className }
       );
       if (values.length > 1) {
-        await t.none(`ALTER TABLE $1:name DROP COLUMN ${columns}`, values);
+        await t.none(
+          `ALTER TABLE $1:name DROP COLUMN IF EXISTS ${columns}`,
+          values
+        );
       }
     });
   }
@@ -2063,13 +2057,11 @@ export class PostgresStorageAdapter implements StorageAdapter {
     schema: SchemaType,
     fieldNames: string[]
   ) {
-    // Use the same name for every ensureUniqueness attempt, because postgres
-    // Will happily create the same index with multiple names.
-    const constraintName = `unique_${fieldNames.sort().join('_')}`;
+    const constraintName = `${className}_unique_${fieldNames.sort().join('_')}`;
     const constraintPatterns = fieldNames.map(
       (fieldName, index) => `$${index + 3}:name`
     );
-    const qs = `ALTER TABLE $1:name ADD CONSTRAINT $2:name UNIQUE (${constraintPatterns.join()})`;
+    const qs = `CREATE UNIQUE INDEX IF NOT EXISTS $2:name ON $1:name(${constraintPatterns.join()})`;
     return this._client
       .none(qs, [className, constraintName, ...fieldNames])
       .catch(error => {
@@ -2462,20 +2454,19 @@ export class PostgresStorageAdapter implements StorageAdapter {
     });
     return Promise.all(promises)
       .then(() => {
-        return this._client.tx('perform-initialization', t => {
-          return t.batch([
-            t.none(sql.misc.jsonObjectSetKeys),
-            t.none(sql.array.add),
-            t.none(sql.array.addUnique),
-            t.none(sql.array.remove),
-            t.none(sql.array.containsAll),
-            t.none(sql.array.containsAllRegex),
-            t.none(sql.array.contains),
-          ]);
+        return this._client.tx('perform-initialization', async t => {
+          await t.none(sql.misc.jsonObjectSetKeys);
+          await t.none(sql.array.add);
+          await t.none(sql.array.addUnique);
+          await t.none(sql.array.remove);
+          await t.none(sql.array.containsAll);
+          await t.none(sql.array.containsAllRegex);
+          await t.none(sql.array.contains);
+          return t.ctx;
         });
       })
-      .then(data => {
-        debug(`initializationDone in ${data.duration}`);
+      .then(ctx => {
+        debug(`initializationDone in ${ctx.duration}`);
       })
       .catch(error => {
         /* eslint-disable no-console */
@@ -2491,7 +2482,7 @@ export class PostgresStorageAdapter implements StorageAdapter {
     return (conn || this._client).tx(t =>
       t.batch(
         indexes.map(i => {
-          return t.none('CREATE INDEX $1:name ON $2:name ($3:name)', [
+          return t.none('CREATE INDEX IF NOT EXISTS $1:name ON $2:name ($3:name)', [
             i.name,
             className,
             i.key,
@@ -2509,7 +2500,7 @@ export class PostgresStorageAdapter implements StorageAdapter {
   ): Promise<void> {
     await (
       conn || this._client
-    ).none('CREATE INDEX $1:name ON $2:name ($3:name)', [
+    ).none('CREATE INDEX IF NOT EXISTS $1:name ON $2:name ($3:name)', [
       fieldName,
       className,
       type,
@@ -2588,7 +2579,7 @@ export class PostgresStorageAdapter implements StorageAdapter {
         (fieldName, index) => `lower($${index + 3}:name) varchar_pattern_ops`
       )
       : fieldNames.map((fieldName, index) => `$${index + 3}:name`);
-    const qs = `CREATE INDEX $1:name ON $2:name (${constraintPatterns.join()})`;
+    const qs = `CREATE INDEX IF NOT EXISTS $1:name ON $2:name (${constraintPatterns.join()})`;
     await conn
       .none(qs, [indexNameOptions.name, className, ...fieldNames])
       .catch(error => {
