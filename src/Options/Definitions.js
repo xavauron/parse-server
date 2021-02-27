@@ -125,6 +125,13 @@ module.exports.ParseServerOptions = {
     help: 'Adapter module for email sending',
     action: parsers.moduleOrObjectParser,
   },
+  emailVerifyTokenReuseIfValid: {
+    env: 'PARSE_SERVER_EMAIL_VERIFY_TOKEN_REUSE_IF_VALID',
+    help:
+      'an existing email verify token should be reused when resend verification email is requested',
+    action: parsers.booleanParser,
+    default: false,
+  },
   emailVerifyTokenValidityDuration: {
     env: 'PARSE_SERVER_EMAIL_VERIFY_TOKEN_VALIDITY_DURATION',
     help: 'Email verification token validity duration, in seconds',
@@ -167,6 +174,12 @@ module.exports.ParseServerOptions = {
     env: 'PARSE_SERVER_FILES_ADAPTER',
     help: 'Adapter module for the files sub-system',
     action: parsers.moduleOrObjectParser,
+  },
+  fileUpload: {
+    env: 'PARSE_SERVER_FILE_UPLOAD_OPTIONS',
+    help: 'Options for file uploads',
+    action: parsers.objectParser,
+    default: {},
   },
   graphQLPath: {
     env: 'PARSE_SERVER_GRAPHQL_PATH',
@@ -275,6 +288,13 @@ module.exports.ParseServerOptions = {
     help: "Sets the number of characters in generated object id's, default 10",
     action: parsers.numberParser('objectIdSize'),
     default: 10,
+  },
+  pages: {
+    env: 'PARSE_SERVER_PAGES',
+    help:
+      'The options for pages such as password reset and email verification. Caution, this is an experimental feature that may not be appropriate for production.',
+    action: parsers.objectParser,
+    default: {},
   },
   passwordPolicy: {
     env: 'PARSE_SERVER_PASSWORD_POLICY',
@@ -404,14 +424,113 @@ module.exports.ParseServerOptions = {
     help: 'Key sent with outgoing webhook calls',
   },
 };
+module.exports.PagesOptions = {
+  customUrls: {
+    env: 'PARSE_SERVER_PAGES_CUSTOM_URLS',
+    help: 'The URLs to the custom pages.',
+    action: parsers.objectParser,
+    default: {},
+  },
+  enableLocalization: {
+    env: 'PARSE_SERVER_PAGES_ENABLE_LOCALIZATION',
+    help: 'Is true if pages should be localized; this has no effect on custom page redirects.',
+    action: parsers.booleanParser,
+    default: false,
+  },
+  enableRouter: {
+    env: 'PARSE_SERVER_PAGES_ENABLE_ROUTER',
+    help:
+      'Is true if the pages router should be enabled; this is required for any of the pages options to take effect. Caution, this is an experimental feature that may not be appropriate for production.',
+    action: parsers.booleanParser,
+    default: false,
+  },
+  forceRedirect: {
+    env: 'PARSE_SERVER_PAGES_FORCE_REDIRECT',
+    help:
+      'Is true if responses should always be redirects and never content, false if the response type should depend on the request type (GET request -> content response; POST request -> redirect response).',
+    action: parsers.booleanParser,
+    default: false,
+  },
+  localizationFallbackLocale: {
+    env: 'PARSE_SERVER_PAGES_LOCALIZATION_FALLBACK_LOCALE',
+    help:
+      'The fallback locale for localization if no matching translation is provided for the given locale. This is only relevant when providing translation resources via JSON file.',
+    default: 'en',
+  },
+  localizationJsonPath: {
+    env: 'PARSE_SERVER_PAGES_LOCALIZATION_JSON_PATH',
+    help:
+      'The path to the JSON file for localization; the translations will be used to fill template placeholders according to the locale.',
+  },
+  pagesEndpoint: {
+    env: 'PARSE_SERVER_PAGES_PAGES_ENDPOINT',
+    help: "The API endpoint for the pages. Default is 'apps'.",
+    default: 'apps',
+  },
+  pagesPath: {
+    env: 'PARSE_SERVER_PAGES_PAGES_PATH',
+    help:
+      "The path to the pages directory; this also defines where the static endpoint '/apps' points to. Default is the './public/' directory.",
+    default: './public',
+  },
+  placeholders: {
+    env: 'PARSE_SERVER_PAGES_PLACEHOLDERS',
+    help:
+      'The placeholder keys and values which will be filled in pages; this can be a simple object or a callback function.',
+    action: parsers.objectParser,
+    default: {},
+  },
+};
+module.exports.PagesCustomUrlsOptions = {
+  emailVerificationLinkExpired: {
+    env: 'PARSE_SERVER_PAGES_CUSTOM_URL_EMAIL_VERIFICATION_LINK_EXPIRED',
+    help: 'The URL to the custom page for email verification -> link expired.',
+  },
+  emailVerificationLinkInvalid: {
+    env: 'PARSE_SERVER_PAGES_CUSTOM_URL_EMAIL_VERIFICATION_LINK_INVALID',
+    help: 'The URL to the custom page for email verification -> link invalid.',
+  },
+  emailVerificationSendFail: {
+    env: 'PARSE_SERVER_PAGES_CUSTOM_URL_EMAIL_VERIFICATION_SEND_FAIL',
+    help: 'The URL to the custom page for email verification -> link send fail.',
+  },
+  emailVerificationSendSuccess: {
+    env: 'PARSE_SERVER_PAGES_CUSTOM_URL_EMAIL_VERIFICATION_SEND_SUCCESS',
+    help: 'The URL to the custom page for email verification -> resend link -> success.',
+  },
+  emailVerificationSuccess: {
+    env: 'PARSE_SERVER_PAGES_CUSTOM_URL_EMAIL_VERIFICATION_SUCCESS',
+    help: 'The URL to the custom page for email verification -> success.',
+  },
+  passwordReset: {
+    env: 'PARSE_SERVER_PAGES_CUSTOM_URL_PASSWORD_RESET',
+    help: 'The URL to the custom page for password reset.',
+  },
+  passwordResetLinkInvalid: {
+    env: 'PARSE_SERVER_PAGES_CUSTOM_URL_PASSWORD_RESET_LINK_INVALID',
+    help: 'The URL to the custom page for password reset -> link invalid.',
+  },
+  passwordResetSuccess: {
+    env: 'PARSE_SERVER_PAGES_CUSTOM_URL_PASSWORD_RESET_SUCCESS',
+    help: 'The URL to the custom page for password reset -> success.',
+  },
+};
 module.exports.CustomPagesOptions = {
   choosePassword: {
     env: 'PARSE_SERVER_CUSTOM_PAGES_CHOOSE_PASSWORD',
     help: 'choose password page path',
   },
+  expiredVerificationLink: {
+    env: 'PARSE_SERVER_CUSTOM_PAGES_EXPIRED_VERIFICATION_LINK',
+    help: 'expired verification link page path',
+  },
   invalidLink: {
     env: 'PARSE_SERVER_CUSTOM_PAGES_INVALID_LINK',
     help: 'invalid link page path',
+  },
+  invalidPasswordResetLink: {
+    env: 'PARSE_SERVER_CUSTOM_PAGES_INVALID_PASSWORD_RESET_LINK',
+    help: 'invalid password reset link page path',
   },
   invalidVerificationLink: {
     env: 'PARSE_SERVER_CUSTOM_PAGES_INVALID_VERIFICATION_LINK',
@@ -543,5 +662,79 @@ module.exports.IdempotencyOptions = {
       'The duration in seconds after which a request record is discarded from the database, defaults to 300s.',
     action: parsers.numberParser('ttl'),
     default: 300,
+  },
+};
+module.exports.AccountLockoutOptions = {
+  duration: {
+    env: 'PARSE_SERVER_ACCOUNT_LOCKOUT_DURATION',
+    help:
+      'number of minutes that a locked-out account remains locked out before automatically becoming unlocked.',
+    action: parsers.numberParser('duration'),
+  },
+  threshold: {
+    env: 'PARSE_SERVER_ACCOUNT_LOCKOUT_THRESHOLD',
+    help: 'number of failed sign-in attempts that will cause a user account to be locked',
+    action: parsers.numberParser('threshold'),
+  },
+  unlockOnPasswordReset: {
+    env: 'PARSE_SERVER_ACCOUNT_LOCKOUT_UNLOCK_ON_PASSWORD_RESET',
+    help: 'Is true if the account lock should be removed after a successful password reset.',
+    action: parsers.booleanParser,
+    default: false,
+  },
+};
+module.exports.PasswordPolicyOptions = {
+  doNotAllowUsername: {
+    env: 'PARSE_SERVER_PASSWORD_POLICY_DO_NOT_ALLOW_USERNAME',
+    help: 'disallow username in passwords',
+    action: parsers.booleanParser,
+  },
+  maxPasswordAge: {
+    env: 'PARSE_SERVER_PASSWORD_POLICY_MAX_PASSWORD_AGE',
+    help: 'days for password expiry',
+    action: parsers.numberParser('maxPasswordAge'),
+  },
+  maxPasswordHistory: {
+    env: 'PARSE_SERVER_PASSWORD_POLICY_MAX_PASSWORD_HISTORY',
+    help: 'setting to prevent reuse of previous n passwords',
+    action: parsers.numberParser('maxPasswordHistory'),
+  },
+  resetTokenReuseIfValid: {
+    env: 'PARSE_SERVER_PASSWORD_POLICY_RESET_TOKEN_REUSE_IF_VALID',
+    help: "resend token if it's still valid",
+    action: parsers.booleanParser,
+  },
+  resetTokenValidityDuration: {
+    env: 'PARSE_SERVER_PASSWORD_POLICY_RESET_TOKEN_VALIDITY_DURATION',
+    help: 'time for token to expire',
+    action: parsers.numberParser('resetTokenValidityDuration'),
+  },
+  validatorCallback: {
+    env: 'PARSE_SERVER_PASSWORD_POLICY_VALIDATOR_CALLBACK',
+    help: 'a callback function to be invoked to validate the password',
+  },
+  validatorPattern: {
+    env: 'PARSE_SERVER_PASSWORD_POLICY_VALIDATOR_PATTERN',
+    help: 'a RegExp object or a regex string representing the pattern to enforce',
+  },
+};
+module.exports.FileUploadOptions = {
+  enableForAnonymousUser: {
+    env: 'PARSE_SERVER_FILE_UPLOAD_ENABLE_FOR_ANONYMOUS_USER',
+    help: 'Is true if file upload should be allowed for anonymous users.',
+    action: parsers.booleanParser,
+    default: false,
+  },
+  enableForAuthenticatedUser: {
+    env: 'PARSE_SERVER_FILE_UPLOAD_ENABLE_FOR_AUTHENTICATED_USER',
+    help: 'Is true if file upload should be allowed for authenticated users.',
+    action: parsers.booleanParser,
+    default: true,
+  },
+  enableForPublic: {
+    env: 'PARSE_SERVER_FILE_UPLOAD_ENABLE_FOR_PUBLIC',
+    help: 'Is true if file upload should be allowed for anyone, regardless of user authentication.',
+    action: parsers.booleanParser,
+    default: false,
   },
 };

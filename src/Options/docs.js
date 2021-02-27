@@ -1,6 +1,6 @@
 /**
  * @interface ParseServerOptions
- * @property {Any} accountLockout account lockout policy for failed login attempts
+ * @property {AccountLockoutOptions} accountLockout account lockout policy for failed login attempts
  * @property {Boolean} allowClientClassCreation Enable (or disable) client class creation, defaults to true
  * @property {Boolean} allowCustomObjectId Enable (or disable) custom objectId
  * @property {String[]} allowHeaders Add headers to Access-Control-Allow-Headers
@@ -23,13 +23,16 @@
  * @property {Boolean} directAccess Replace HTTP Interface when using JS SDK in current node runtime, defaults to false. Caution, this is an experimental feature that may not be appropriate for production.
  * @property {String} dotNetKey Key for Unity and .Net SDK
  * @property {Adapter<MailAdapter>} emailAdapter Adapter module for email sending
+ * @property {Boolean} emailVerifyTokenReuseIfValid an existing email verify token should be reused when resend verification email is requested
  * @property {Number} emailVerifyTokenValidityDuration Email verification token validity duration, in seconds
  * @property {Boolean} enableAnonymousUsers Enable (or disable) anonymous users, defaults to true
  * @property {Boolean} enableExpressErrorHandler Enables the default express error handler for all errors
  * @property {Boolean} enableSingleSchemaCache Use a single schema cache shared across requests. Reduces number of queries made to _SCHEMA, defaults to false, i.e. unique schema cache per request.
+ * @property {String} encryptionKey Key for encrypting your files
  * @property {Boolean} expireInactiveSessions Sets wether we should expire the inactive sessions, defaults to true
  * @property {String} fileKey Key for your files
  * @property {Adapter<FilesAdapter>} filesAdapter Adapter module for the files sub-system
+ * @property {FileUploadOptions} fileUpload Options for file uploads
  * @property {String} graphQLPath Mount path for the GraphQL endpoint, defaults to /graphql
  * @property {String} graphQLSchema Full path to your GraphQL custom schema.graphql file
  * @property {String} host The host to serve ParseServer on, defaults to 0.0.0.0
@@ -51,7 +54,8 @@
  * @property {String} mountPath Mount path for the server, defaults to /parse
  * @property {Boolean} mountPlayground Mounts the GraphQL Playground - never use this option in production
  * @property {Number} objectIdSize Sets the number of characters in generated object id's, default 10
- * @property {Any} passwordPolicy Password policy for enforcing password related rules
+ * @property {PagesOptions} pages The options for pages such as password reset and email verification. Caution, this is an experimental feature that may not be appropriate for production.
+ * @property {PasswordPolicyOptions} passwordPolicy Password policy for enforcing password related rules
  * @property {String} playgroundPath Mount path for the GraphQL Playground, defaults to /playground
  * @property {Number} port The port to run the ParseServer, defaults to 1337.
  * @property {Boolean} preserveFileName Enable (or disable) the addition of a unique hash to the file names
@@ -77,9 +81,36 @@
  */
 
 /**
+ * @interface PagesOptions
+ * @property {PagesCustomUrlsOptions} customUrls The URLs to the custom pages.
+ * @property {Boolean} enableLocalization Is true if pages should be localized; this has no effect on custom page redirects.
+ * @property {Boolean} enableRouter Is true if the pages router should be enabled; this is required for any of the pages options to take effect. Caution, this is an experimental feature that may not be appropriate for production.
+ * @property {Boolean} forceRedirect Is true if responses should always be redirects and never content, false if the response type should depend on the request type (GET request -> content response; POST request -> redirect response).
+ * @property {String} localizationFallbackLocale The fallback locale for localization if no matching translation is provided for the given locale. This is only relevant when providing translation resources via JSON file.
+ * @property {String} localizationJsonPath The path to the JSON file for localization; the translations will be used to fill template placeholders according to the locale.
+ * @property {String} pagesEndpoint The API endpoint for the pages. Default is 'apps'.
+ * @property {String} pagesPath The path to the pages directory; this also defines where the static endpoint '/apps' points to. Default is the './public/' directory.
+ * @property {Object} placeholders The placeholder keys and values which will be filled in pages; this can be a simple object or a callback function.
+ */
+
+/**
+ * @interface PagesCustomUrlsOptions
+ * @property {String} emailVerificationLinkExpired The URL to the custom page for email verification -> link expired.
+ * @property {String} emailVerificationLinkInvalid The URL to the custom page for email verification -> link invalid.
+ * @property {String} emailVerificationSendFail The URL to the custom page for email verification -> link send fail.
+ * @property {String} emailVerificationSendSuccess The URL to the custom page for email verification -> resend link -> success.
+ * @property {String} emailVerificationSuccess The URL to the custom page for email verification -> success.
+ * @property {String} passwordReset The URL to the custom page for password reset.
+ * @property {String} passwordResetLinkInvalid The URL to the custom page for password reset -> link invalid.
+ * @property {String} passwordResetSuccess The URL to the custom page for password reset -> success.
+ */
+
+/**
  * @interface CustomPagesOptions
  * @property {String} choosePassword choose password page path
+ * @property {String} expiredVerificationLink expired verification link page path
  * @property {String} invalidLink invalid link page path
+ * @property {String} invalidPasswordResetLink invalid password reset link page path
  * @property {String} invalidVerificationLink invalid verification link page path
  * @property {String} linkSendFail verification link send fail page path
  * @property {String} linkSendSuccess verification link send success page path
@@ -117,4 +148,29 @@
  * @interface IdempotencyOptions
  * @property {String[]} paths An array of paths for which the feature should be enabled. The mount path must not be included, for example instead of `/parse/functions/myFunction` specifiy `functions/myFunction`. The entries are interpreted as regular expression, for example `functions/.*` matches all functions, `jobs/.*` matches all jobs, `classes/.*` matches all classes, `.*` matches all paths.
  * @property {Number} ttl The duration in seconds after which a request record is discarded from the database, defaults to 300s.
+ */
+
+/**
+ * @interface AccountLockoutOptions
+ * @property {Number} duration number of minutes that a locked-out account remains locked out before automatically becoming unlocked.
+ * @property {Number} threshold number of failed sign-in attempts that will cause a user account to be locked
+ * @property {Boolean} unlockOnPasswordReset Is true if the account lock should be removed after a successful password reset.
+ */
+
+/**
+ * @interface PasswordPolicyOptions
+ * @property {Boolean} doNotAllowUsername disallow username in passwords
+ * @property {Number} maxPasswordAge days for password expiry
+ * @property {Number} maxPasswordHistory setting to prevent reuse of previous n passwords
+ * @property {Boolean} resetTokenReuseIfValid resend token if it's still valid
+ * @property {Number} resetTokenValidityDuration time for token to expire
+ * @property {Function} validatorCallback a callback function to be invoked to validate the password
+ * @property {String} validatorPattern a RegExp object or a regex string representing the pattern to enforce
+ */
+
+/**
+ * @interface FileUploadOptions
+ * @property {Boolean} enableForAnonymousUser Is true if file upload should be allowed for anonymous users.
+ * @property {Boolean} enableForAuthenticatedUser Is true if file upload should be allowed for authenticated users.
+ * @property {Boolean} enableForPublic Is true if file upload should be allowed for anyone, regardless of user authentication.
  */

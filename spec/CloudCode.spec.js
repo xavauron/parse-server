@@ -216,6 +216,21 @@ describe('Cloud Code', () => {
     );
   });
 
+  it('test beforeSave with invalid field', async () => {
+    Parse.Cloud.beforeSave('BeforeSaveChanged', function (req) {
+      req.object.set('length', 0);
+    });
+
+    const obj = new Parse.Object('BeforeSaveChanged');
+    obj.set('foo', 'bar');
+    try {
+      await obj.save();
+      fail('should not succeed');
+    } catch (e) {
+      expect(e.message).toBe('Invalid field name: length.');
+    }
+  });
+
   it("test beforeSave changed object fail doesn't change object", async function () {
     Parse.Cloud.beforeSave('BeforeSaveChanged', function (req) {
       if (req.object.has('fail')) {
@@ -1479,6 +1494,45 @@ describe('Cloud Code', () => {
     });
   });
 
+  it('beforeSave should not sanitize database', async done => {
+    const { adapter } = Config.get(Parse.applicationId).database;
+    const spy = spyOn(adapter, 'findOneAndUpdate').and.callThrough();
+    spy.calls.saveArgumentsByValue();
+
+    let count = 0;
+    Parse.Cloud.beforeSave('CloudIncrementNested', req => {
+      count += 1;
+      req.object.set('foo', 'baz');
+      expect(typeof req.object.get('objectField').number).toBe('number');
+    });
+
+    Parse.Cloud.afterSave('CloudIncrementNested', req => {
+      expect(typeof req.object.get('objectField').number).toBe('number');
+    });
+
+    const obj = new Parse.Object('CloudIncrementNested');
+    obj.set('objectField', { number: 5 });
+    obj.set('foo', 'bar');
+    await obj.save();
+
+    obj.increment('objectField.number', 10);
+    await obj.save();
+
+    const [
+      ,
+      ,
+      ,
+      /* className */ /* schema */ /* query */ update,
+    ] = adapter.findOneAndUpdate.calls.first().args;
+    expect(update).toEqual({
+      'objectField.number': { __op: 'Increment', amount: 10 },
+      foo: 'baz',
+      updatedAt: obj.updatedAt.toISOString(),
+    });
+
+    count === 2 ? done() : fail();
+  });
+
   /**
    * Verifies that an afterSave hook throwing an exception
    * will not prevent a successful save response from being returned
@@ -1495,7 +1549,9 @@ describe('Cloud Code', () => {
   describe('cloud jobs', () => {
     it('should define a job', done => {
       expect(() => {
-        Parse.Cloud.job('myJob', () => {});
+        Parse.Cloud.job('myJob', ({ message }) => {
+          message('Hello, world!!!');
+        });
       }).not.toThrow();
 
       request({
@@ -1505,15 +1561,19 @@ describe('Cloud Code', () => {
           'X-Parse-Application-Id': Parse.applicationId,
           'X-Parse-Master-Key': Parse.masterKey,
         },
-      }).then(
-        () => {
-          done();
-        },
-        err => {
-          fail(err);
-          done();
-        }
-      );
+      })
+        .then(async response => {
+          const jobStatusId = response.headers['x-parse-job-status-id'];
+          const checkJobStatus = async () => {
+            const jobStatus = await getJobStatus(jobStatusId);
+            return jobStatus.get('finishedAt') && jobStatus.get('message') === 'Hello, world!!!';
+          };
+          while (!(await checkJobStatus())) {
+            await new Promise(resolve => setTimeout(resolve, 100));
+          }
+        })
+        .then(done)
+        .catch(done.fail);
     });
 
     it('should not run without master key', done => {
@@ -1548,7 +1608,6 @@ describe('Cloud Code', () => {
           expect(typeof req.jobId).toBe('string');
           expect(typeof req.message).toBe('function');
           expect(typeof res).toBe('undefined');
-          done();
         });
       }).not.toThrow();
 
@@ -1559,13 +1618,19 @@ describe('Cloud Code', () => {
           'X-Parse-Application-Id': Parse.applicationId,
           'X-Parse-Master-Key': Parse.masterKey,
         },
-      }).then(
-        () => {},
-        err => {
-          fail(err);
-          done();
-        }
-      );
+      })
+        .then(async response => {
+          const jobStatusId = response.headers['x-parse-job-status-id'];
+          const checkJobStatus = async () => {
+            const jobStatus = await getJobStatus(jobStatusId);
+            return jobStatus.get('finishedAt');
+          };
+          while (!(await checkJobStatus())) {
+            await new Promise(resolve => setTimeout(resolve, 100));
+          }
+        })
+        .then(done)
+        .catch(done.fail);
     });
 
     it('should run with master key basic auth', done => {
@@ -1576,27 +1641,31 @@ describe('Cloud Code', () => {
           expect(typeof req.jobId).toBe('string');
           expect(typeof req.message).toBe('function');
           expect(typeof res).toBe('undefined');
-          done();
         });
       }).not.toThrow();
 
       request({
         method: 'POST',
         url: `http://${Parse.applicationId}:${Parse.masterKey}@localhost:8378/1/jobs/myJob`,
-      }).then(
-        () => {},
-        err => {
-          fail(err);
-          done();
-        }
-      );
+      })
+        .then(async response => {
+          const jobStatusId = response.headers['x-parse-job-status-id'];
+          const checkJobStatus = async () => {
+            const jobStatus = await getJobStatus(jobStatusId);
+            return jobStatus.get('finishedAt');
+          };
+          while (!(await checkJobStatus())) {
+            await new Promise(resolve => setTimeout(resolve, 100));
+          }
+        })
+        .then(done)
+        .catch(done.fail);
     });
 
     it('should set the message / success on the job', done => {
       Parse.Cloud.job('myJob', req => {
-        req.message('hello');
-        const promise = req
-          .message()
+        return req
+          .message('hello')
           .then(() => {
             return getJobStatus(req.jobId);
           })
@@ -1604,21 +1673,6 @@ describe('Cloud Code', () => {
             expect(jobStatus.get('message')).toEqual('hello');
             expect(jobStatus.get('status')).toEqual('running');
           });
-        promise
-          .then(() => {
-            return getJobStatus(req.jobId);
-          })
-          .then(jobStatus => {
-            expect(jobStatus.get('message')).toEqual('hello');
-            expect(jobStatus.get('status')).toEqual('succeeded');
-            done();
-          })
-          .catch(err => {
-            console.error(err);
-            jfail(err);
-            done();
-          });
-        return promise;
       });
 
       request({
@@ -1628,32 +1682,28 @@ describe('Cloud Code', () => {
           'X-Parse-Application-Id': Parse.applicationId,
           'X-Parse-Master-Key': Parse.masterKey,
         },
-      }).then(
-        () => {},
-        err => {
-          fail(err);
-          done();
-        }
-      );
+      })
+        .then(async response => {
+          const jobStatusId = response.headers['x-parse-job-status-id'];
+          const checkJobStatus = async () => {
+            const jobStatus = await getJobStatus(jobStatusId);
+            return (
+              jobStatus.get('finishedAt') &&
+              jobStatus.get('message') === 'hello' &&
+              jobStatus.get('status') === 'succeeded'
+            );
+          };
+          while (!(await checkJobStatus())) {
+            await new Promise(resolve => setTimeout(resolve, 100));
+          }
+        })
+        .then(done)
+        .catch(done.fail);
     });
 
     it('should set the failure on the job', done => {
-      Parse.Cloud.job('myJob', req => {
-        const promise = Promise.reject('Something went wrong');
-        new Promise(resolve => setTimeout(resolve, 200))
-          .then(() => {
-            return getJobStatus(req.jobId);
-          })
-          .then(jobStatus => {
-            expect(jobStatus.get('message')).toEqual('Something went wrong');
-            expect(jobStatus.get('status')).toEqual('failed');
-            done();
-          })
-          .catch(err => {
-            jfail(err);
-            done();
-          });
-        return promise;
+      Parse.Cloud.job('myJob', () => {
+        return Promise.reject('Something went wrong');
       });
 
       request({
@@ -1663,13 +1713,23 @@ describe('Cloud Code', () => {
           'X-Parse-Application-Id': Parse.applicationId,
           'X-Parse-Master-Key': Parse.masterKey,
         },
-      }).then(
-        () => {},
-        err => {
-          fail(err);
-          done();
-        }
-      );
+      })
+        .then(async response => {
+          const jobStatusId = response.headers['x-parse-job-status-id'];
+          const checkJobStatus = async () => {
+            const jobStatus = await getJobStatus(jobStatusId);
+            return (
+              jobStatus.get('finishedAt') &&
+              jobStatus.get('message') === 'Something went wrong' &&
+              jobStatus.get('status') === 'failed'
+            );
+          };
+          while (!(await checkJobStatus())) {
+            await new Promise(resolve => setTimeout(resolve, 100));
+          }
+        })
+        .then(done)
+        .catch(done.fail);
     });
 
     it('should set the failure message on the job error', async () => {
@@ -1677,9 +1737,15 @@ describe('Cloud Code', () => {
         throw new Parse.Error(101, 'Something went wrong');
       });
       const job = await Parse.Cloud.startJob('myJobError');
-      const jobStatus = await Parse.Cloud.getJobStatus(job);
+      let jobStatus, status;
+      while (status !== 'failed') {
+        if (jobStatus) {
+          await new Promise(resolve => setTimeout(resolve, 10));
+        }
+        jobStatus = await Parse.Cloud.getJobStatus(job);
+        status = jobStatus.get('status');
+      }
       expect(jobStatus.get('message')).toEqual('Something went wrong');
-      expect(jobStatus.get('status')).toEqual('failed');
     });
 
     function getJobStatus(jobId) {
@@ -1719,6 +1785,39 @@ describe('beforeSave hooks', () => {
     const MyObject = Parse.Object.extend('MyObject');
     const myObject = new MyObject();
     myObject.save().then(() => done());
+  });
+
+  it('should respect custom object ids (#6733)', async () => {
+    Parse.Cloud.beforeSave('TestObject', req => {
+      expect(req.object.id).toEqual('test_6733');
+    });
+
+    await reconfigureServer({ allowCustomObjectId: true });
+
+    const req = request({
+      // Parse JS SDK does not currently support custom object ids (see #1097), so we do a REST request
+      method: 'POST',
+      url: 'http://localhost:8378/1/classes/TestObject',
+      headers: {
+        'X-Parse-Application-Id': 'test',
+        'X-Parse-REST-API-Key': 'rest',
+      },
+      body: {
+        objectId: 'test_6733',
+        foo: 'bar',
+      },
+    });
+
+    {
+      const res = await req;
+      expect(res.data.objectId).toEqual('test_6733');
+    }
+
+    const query = new Parse.Query('TestObject');
+    query.equalTo('objectId', 'test_6733');
+    const res = await query.find();
+    expect(res.length).toEqual(1);
+    expect(res[0].get('foo')).toEqual('bar');
   });
 });
 
@@ -3097,5 +3196,41 @@ describe('afterLogin hook', () => {
     });
 
     await Parse.Cloud.run('contextTest', {}, { context: { a: 'a' } });
+  });
+
+  it('afterFind should have access to context', async () => {
+    Parse.Cloud.afterFind('TestObject', req => {
+      expect(req.context.a).toEqual('a');
+    });
+    const obj = new TestObject();
+    await obj.save();
+    const query = new Parse.Query(TestObject);
+    await query.find({ context: { a: 'a' } });
+  });
+});
+
+describe('sendEmail', () => {
+  it('can send email via Parse.Cloud', async done => {
+    const emailAdapter = {
+      sendMail: mailData => {
+        expect(mailData).toBeDefined();
+        expect(mailData.to).toBe('test');
+        done();
+      },
+    };
+    await reconfigureServer({
+      emailAdapter: emailAdapter,
+    });
+    const mailData = { to: 'test' };
+    await Parse.Cloud.sendEmail(mailData);
+  });
+
+  it('cannot send email without adapter', async () => {
+    const logger = require('../lib/logger').logger;
+    spyOn(logger, 'error').and.callFake(() => {});
+    await Parse.Cloud.sendEmail({});
+    expect(logger.error).toHaveBeenCalledWith(
+      'Failed to send email because no mail adapter is configured for Parse Server.'
+    );
   });
 });
